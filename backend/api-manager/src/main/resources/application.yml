@@ -1,0 +1,33 @@
+server:
+  port: ${PORT:8080}
+spring:
+  application:
+    name: api-manager
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8180/realms/ea2}
+          jwk-set-uri: ${OIDC_JWKS:http://keycloak:8080/realms/ea2/protocol/openid-connect/certs}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+app:
+  audience: ${OIDC_AUDIENCE:ea2-web}
+  cors-origin: ${WEB_ORIGIN:http://localhost:4200}
+---
+gateway:
+  orders-url: ${ORDERS_URL:http://order-service:8080}
+  admin-url: ${ADMIN_URL:http://admin-service:8080}
+  workers-url: ${WORKERS_URL:http://worker-service:8080}
+---
+messaging:
+  enabled: false
+spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration

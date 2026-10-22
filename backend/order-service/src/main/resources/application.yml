@@ -1,0 +1,47 @@
+server:
+  port: ${PORT:8080}
+spring:
+  application:
+    name: order-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8180/realms/ea2}
+          jwk-set-uri: ${OIDC_JWKS:http://keycloak:8080/realms/ea2/protocol/openid-connect/certs}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+app:
+  audience: ${OIDC_AUDIENCE:ea2-web}
+  cors-origin: ${WEB_ORIGIN:http://localhost:4200}
+---
+spring:
+  rabbitmq:
+    addresses: ${RABBIT_ADDRESSES:rabbit1:5672,rabbit2:5672}
+    username: ${RABBIT_USER:ea2}
+    password: ${RABBIT_PASSWORD}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+        default-requeue-rejected: false
+---
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://postgres:5432/orders}
+    username: ${DATABASE_USER:ea2}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update

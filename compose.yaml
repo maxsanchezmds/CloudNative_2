@@ -1,0 +1,127 @@
+name: ea2-p16
+x-service: &service
+  restart: unless-stopped
+  env_file: .env
+  mem_limit: 420m
+  environment: &appenv
+    RABBIT_ADDRESSES: rabbit1:5672,rabbit2:5672
+    RABBIT_USER: ea2
+    DATABASE_URL: jdbc:postgresql://postgres:5432/orders
+    DATABASE_USER: ea2
+  depends_on:
+    rabbit2:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+services:
+  rabbit1:
+    image: rabbitmq:4.2-management
+    hostname: rabbit1
+    restart: unless-stopped
+    mem_limit: 650m
+    environment:
+      RABBITMQ_DEFAULT_USER: ea2
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+      RABBITMQ_ERLANG_COOKIE: ${RABBIT_COOKIE}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: +S 2:2
+    ports: ["127.0.0.1:15680:15672"]
+    volumes:
+      - rabbit1:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 8s
+      retries: 15
+  rabbit2:
+    image: rabbitmq:4.2-management
+    hostname: rabbit2
+    restart: unless-stopped
+    mem_limit: 650m
+    environment:
+      RABBITMQ_DEFAULT_USER: ea2
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+      RABBITMQ_ERLANG_COOKIE: ${RABBIT_COOKIE}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: +S 2:2
+    ports: ["127.0.0.1:15681:15672"]
+    volumes:
+      - rabbit2:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    depends_on:
+      rabbit1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 8s
+      retries: 15
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    mem_limit: 300m
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: ea2
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ea2 -d orders"]
+      interval: 5s
+      timeout: 4s
+      retries: 15
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.0
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    restart: unless-stopped
+    mem_limit: 800m
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KC_HOSTNAME: http://localhost:8180
+      JAVA_OPTS_KC_HEAP: -Xms128m -Xmx512m
+    ports: ["127.0.0.1:8180:8080"]
+    volumes: ["./.secrets/realm.json:/opt/keycloak/data/import/realm.json:ro", "keycloak:/opt/keycloak/data"]
+    profiles: ["local"]
+  order-service:
+    <<: *service
+    build:
+      context: backend
+      args: {MODULE: order-service}
+    environment:
+      <<: *appenv
+  worker-service:
+    <<: *service
+    build:
+      context: backend
+      args: {MODULE: worker-service}
+    environment:
+      <<: *appenv
+  admin-service:
+    <<: *service
+    build:
+      context: backend
+      args: {MODULE: admin-service}
+    environment:
+      <<: *appenv
+  api-manager:
+    <<: *service
+    build:
+      context: backend
+      args: {MODULE: api-manager}
+    mem_limit: 350m
+    ports: ["127.0.0.1:8088:8080"]
+    depends_on: [order-service, worker-service, admin-service]
+    environment:
+      <<: *appenv
+  frontend:
+    build: frontend
+    restart: unless-stopped
+    mem_limit: 128m
+    ports: ["127.0.0.1:4200:80"]
+    volumes: ["./frontend/public/config.json:/usr/share/nginx/html/config.json:ro"]
+    depends_on: [api-manager]
+volumes:
+  rabbit1:
+  rabbit2:
+  postgres:
+  keycloak:

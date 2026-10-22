@@ -1,0 +1,1 @@
+{"apiBase":"http://localhost:8088","authority":"http://localhost:8180/realms/ea2","clientId":"ea2-web","scope":"openid profile email","environment":"Local · Docker Compose"}
